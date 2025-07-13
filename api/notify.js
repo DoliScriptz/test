@@ -12,23 +12,25 @@ export default async function handler(req, res) {
   if (sig !== check) return res.status(403).end();
   if (Date.now() > parseInt(exp)) return res.status(403).end();
 
-  const mainWebhook = process.env.WEBHOOK_URL;
-  const secretWebhook = process.env.SECRET_WEBHOOK_URL;
-  if (!mainWebhook || !secretWebhook) return res.status(500).end();
-
-  const desc = [];
+  const grouped = {};
+  let foundSecret = false;
   for (const item of found) {
-    desc.push(`- Owner: ${item.owner}`);
-    desc.push(`• ${item.displayName} - ${item.rarity}`);
+    if (!grouped[item.owner]) grouped[item.owner] = [];
+    grouped[item.owner].push(`• ${item.displayName} - ${item.rarity}`);
+    if (item.rarity === "Secret") foundSecret = true;
   }
+
+  const description = Object.entries(grouped)
+    .map(([owner, list]) => `**${owner}'s Base**\n${list.join('\n')}`)
+    .join('\n\n');
 
   const embed = {
     title: `Brainrot(s) Found`,
-    description: desc.join('\n'),
+    description: `[Join Here](${link})\n\n${description}`,
     color: 0x00FF00,
     fields: [
       { name: "Players Inside", value: `${players}`, inline: true },
-      { name: "Join Link", value: `[Join Here](${link})`, inline: false }
+      { name: "Found By", value: username, inline: true }
     ],
     timestamp: new Date().toISOString(),
     footer: {
@@ -37,13 +39,18 @@ export default async function handler(req, res) {
     }
   };
 
+  const mainWebhook = process.env.WEBHOOK_URL;
+  const secretWebhook = process.env.SECRET_WEBHOOK_URL;
+
+  if (!mainWebhook || !secretWebhook) return res.status(500).end();
+
   await fetch(mainWebhook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ embeds: [embed] })
   });
 
-  if (found.some(x => x.rarity === "Secret")) {
+  if (foundSecret) {
     await fetch(secretWebhook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
